@@ -1,0 +1,210 @@
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Create Android project
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/lotsize/calculator
+          mkdir -p app/src/main/res/values
+
+          cat > settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+
+          rootProject.name = "LotSizeCalculator"
+          include(":app")
+          EOF
+
+          cat > build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.5.2' apply false
+          }
+          EOF
+
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          EOF
+
+          cat > app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.lotsize.calculator'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.lotsize.calculator'
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          EOF
+
+          cat > app/src/main/res/values/styles.xml <<'EOF'
+          <resources>
+              <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+                  <item name="android:fontFamily">sans</item>
+                  <item name="android:colorAccent">#22c55e</item>
+                  <item name="android:navigationBarColor">#050914</item>
+                  <item name="android:statusBarColor">#050914</item>
+                  <item name="android:windowLightStatusBar">false</item>
+              </style>
+          </resources>
+          EOF
+
+          cat > app/src/main/AndroidManifest.xml <<'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:theme="@style/AppTheme"
+                  android:label="Trade Lot Size Calculator"
+                  android:allowBackup="false"
+                  android:supportsRtl="true">
+                  <activity
+                      android:name=".MainActivity"
+                      android:screenOrientation="portrait"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > app/src/main/java/com/lotsize/calculator/MainActivity.java <<'EOF'
+          package com.lotsize.calculator;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.graphics.Color;
+          import android.graphics.Typeface;
+          import android.view.Gravity;
+          import android.view.View;
+          import android.widget.*;
+
+          public class MainActivity extends Activity {
+
+              EditText capital, risk, entry, stop, contract;
+              TextView result;
+
+              int dp(float v) {
+                  return (int)(v * getResources().getDisplayMetrics().density + 0.5f);
+              }
+
+              TextView label(String text) {
+                  TextView t = new TextView(this);
+                  t.setText(text);
+                  t.setTextColor(Color.WHITE);
+                  t.setTextSize(14);
+                  t.setPadding(0, dp(8), 0, dp(4));
+                  return t;
+              }
+
+              EditText field(String hint) {
+                  EditText e = new EditText(this);
+                  e.setHint(hint);
+                  e.setHintTextColor(Color.rgb(150,160,175));
+                  e.setTextColor(Color.WHITE);
+                  e.setTextSize(15);
+                  e.setSingleLine(true);
+                  e.setPadding(dp(14), 0, dp(14), 0);
+                  e.setBackgroundColor(Color.rgb(28,39,58));
+                  return e;
+              }
+
+              @Override
+              public void onCreate(Bundle b) {
+                  super.onCreate(b);
+
+                  LinearLayout root = new LinearLayout(this);
+                  root.setOrientation(LinearLayout.VERTICAL);
+                  root.setBackgroundColor(Color.rgb(5,9,20));
+
+                  TextView title = new TextView(this);
+                  title.setText("Trade Lot Size Calculator");
+                  title.setTextColor(Color.WHITE);
+                  title.setTextSize(20);
+                  title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+                  title.setGravity(Gravity.CENTER_VERTICAL);
+                  title.setPadding(dp(18), 0, dp(18), 0);
+                  title.setBackgroundColor(Color.BLACK);
+                  root.addView(title, new LinearLayout.LayoutParams(-1, dp(62)));
+
+                  ScrollView scroll = new ScrollView(this);
+                  LinearLayout box = new LinearLayout(this);
+                  box.setOrientation(LinearLayout.VERTICAL);
+                  box.setPadding(dp(18), dp(14), dp(18), dp(24));
+
+                  box.addView(label("Instrument"));
+                  EditText instrument = field("e.g. EURUSD");
+                  box.addView(instrument, new LinearLayout.LayoutParams(-1, dp(50)));
+
+                  box.addView(label("Direction"));
+                  Spinner direction = new Spinner(this);
+                  String[] dirs = {"Buy", "Sell"};
+                  direction.setAdapter(new ArrayAdapter<String>(
+                      this, android.R.layout.simple_spinner_dropdown_item, dirs));
+                  box.addView(direction, new LinearLayout.LayoutParams(-1, dp(50)));
+
+                  box.addView(label("Capital ($)"));
+                  capital = field("Account capital");
+                  box.addView(capital, new LinearLayout.LayoutParams(-1, dp(50)));
+
+                  box.addView(label("Risk (%)"));
+                  risk = field("Risk percentage");
+                  box.addView(risk, new LinearLayout.LayoutParams(-1, dp(50)));
+
+                  box.addView(label("Entry Price"));
+                  entry = field("Entry price");
+                  box.addView(entry, new LinearLayout.LayoutParams(-1, dp(50)));
+
+                  box.addView(label("Stop Loss"));
+                  stop = field("Stop loss price");
+                  box.addView(stop, new LinearLayout.LayoutParams(-1, dp(50)));
+
+                  box.addView(label("Take Profit"));
+                  EditText take = field("Take profit (optional)");
+                  box.addView(take, new LinearLayout.LayoutParams(-1, dp(50)));
+
+                  box.addView(label("Contract Size (units per 1 lot)"));
+                  contract = field("100000");
+                  contract.setText("100000");
+                  box
